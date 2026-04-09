@@ -12,8 +12,7 @@ export default async function ItemsPage() {
       .order('sort_order', { ascending: true }),
     supabase
       .from('categories')
-      .select('id, name')
-      .eq('is_active', true)
+      .select('id, name, is_active')
       .order('sort_order', { ascending: true }),
   ])
 
@@ -22,10 +21,18 @@ export default async function ItemsPage() {
     category_name: item.categories?.name || 'Kategorisiz',
   }))
 
+  const categories = (categoriesResult.data || []).filter((category) => {
+    if (typeof category.is_active === 'boolean') {
+      return category.is_active
+    }
+
+    return true
+  }).map(({ id, name }) => ({ id, name }))
+
   return (
     <ItemsClient 
       initialItems={items} 
-      categories={categoriesResult.data || []} 
+      categories={categories} 
     />
   )
 }

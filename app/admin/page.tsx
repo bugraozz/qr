@@ -6,30 +6,44 @@ import Link from 'next/link'
 export default async function AdminDashboard() {
   const supabase = await createClient()
   
-  const [categoriesResult, itemsResult, activeItemsResult] = await Promise.all([
-    supabase.from('categories').select('id', { count: 'exact' }),
-    supabase.from('menu_items').select('id', { count: 'exact' }),
-    supabase.from('menu_items').select('id', { count: 'exact' }).eq('is_available', true),
+  const [categoriesResult, itemsResult] = await Promise.all([
+    supabase.from('categories').select('id'),
+    supabase.from('menu_items').select('id, is_available, is_active'),
   ])
+
+  const totalCategories = categoriesResult.data?.length || 0
+  const totalItems = itemsResult.data?.length || 0
+  const activeItems = (itemsResult.data || []).filter((item) => {
+    const hasIsAvailable = typeof item.is_available === 'boolean'
+    if (hasIsAvailable) {
+      return item.is_available
+    }
+
+    if (typeof item.is_active === 'boolean') {
+      return item.is_active
+    }
+
+    return true
+  }).length
 
   const stats = [
     {
       title: 'Toplam Kategori',
-      value: categoriesResult.count || 0,
+      value: totalCategories,
       icon: FolderOpen,
       href: '/admin/categories',
       color: 'text-blue-500',
     },
     {
       title: 'Toplam Urun',
-      value: itemsResult.count || 0,
+      value: totalItems,
       icon: UtensilsCrossed,
       href: '/admin/items',
       color: 'text-green-500',
     },
     {
       title: 'Aktif Urun',
-      value: activeItemsResult.count || 0,
+      value: activeItems,
       icon: Eye,
       href: '/admin/items',
       color: 'text-primary',

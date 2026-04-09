@@ -1,14 +1,47 @@
+-- Compatibility patch for older schemas
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE public.menu_items ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT true;
+
+UPDATE public.categories
+SET slug = lower(regexp_replace(regexp_replace(name, '[^a-zA-Z0-9\s-]', '', 'g'), '\s+', '-', 'g'))
+WHERE slug IS NULL OR slug = '';
+
+WITH ranked_slugs AS (
+  SELECT id, slug, ROW_NUMBER() OVER (PARTITION BY slug ORDER BY created_at, id) AS rn
+  FROM public.categories
+  WHERE slug IS NOT NULL AND slug <> ''
+)
+UPDATE public.categories c
+SET slug = c.slug || '-' || substr(c.id::text, 1, 8)
+FROM ranked_slugs r
+WHERE c.id = r.id AND r.rn > 1;
+
+UPDATE public.categories
+SET is_active = true
+WHERE is_active IS NULL;
+
+UPDATE public.menu_items
+SET is_available = true
+WHERE is_available IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_categories_slug ON public.categories(slug);
+
 -- Seed categories
-INSERT INTO categories (id, name, slug, icon, image, sort_order) VALUES
+INSERT INTO public.categories (id, name, slug, icon, image, sort_order) VALUES
   (gen_random_uuid(), 'Sicak Icecekler', 'sicak-icecekler', 'coffee', '/images/hot-drinks.jpg', 0),
   (gen_random_uuid(), 'Soguk Icecekler', 'soguk-icecekler', 'glass-water', '/images/cold-drinks.jpg', 1),
   (gen_random_uuid(), 'Kahvalti', 'kahvalti', 'egg', '/images/breakfast.jpg', 2),
-  (gen_random_uuid(), 'Atistirmaliklar', 'atistirmalik', 'sandwich', '/images/snacks.jpg', 3),
+  (gen_random_uuid(), 'Atistirmaliklar', 'atistirmaliklar', 'sandwich', '/images/snacks.jpg', 3),
   (gen_random_uuid(), 'Tatlilar', 'tatlilar', 'cake', '/images/desserts.jpg', 4)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  icon = EXCLUDED.icon,
+  image = EXCLUDED.image,
+  sort_order = EXCLUDED.sort_order;
 
 -- Seed menu items for Sicak Icecekler
-INSERT INTO menu_items (name, description, price, badge, is_popular, sort_order, category_id)
+INSERT INTO public.menu_items (name, description, price, badge, is_popular, sort_order, category_id)
 SELECT val.name, val.description, val.price, val.badge, val.is_popular, val.sort_order, c.id
 FROM (VALUES
   ('Turk Kahvesi', 'Geleneksel yontemle pisirilmis, ince cekilmis ozel harman', 65, NULL, true, 0),
@@ -24,10 +57,17 @@ FROM (VALUES
   ('Demlik Cay', 'Rizeden ozel secilmis yapraklar, iki kisilik demlik', 40, NULL, false, 10),
   ('Bitki Cayi', 'Ihlamur, adacayi, papatya veya nane-limon', 50, NULL, false, 11)
 ) AS val(name, description, price, badge, is_popular, sort_order)
-CROSS JOIN categories c WHERE c.slug = 'sicak-icecekler';
+CROSS JOIN public.categories c
+WHERE c.slug = 'sicak-icecekler'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.menu_items mi
+    WHERE mi.category_id = c.id
+      AND mi.name = val.name
+  );
 
 -- Seed menu items for Soguk Icecekler
-INSERT INTO menu_items (name, description, price, badge, is_popular, sort_order, category_id)
+INSERT INTO public.menu_items (name, description, price, badge, is_popular, sort_order, category_id)
 SELECT val.name, val.description, val.price, val.badge, val.is_popular, val.sort_order, c.id
 FROM (VALUES
   ('Iced Latte', 'Soguk sut, buz ve espresso shot', 90, NULL, true, 0),
@@ -39,10 +79,17 @@ FROM (VALUES
   ('Meyve Smoothie', 'Mevsim meyveleri, yogurt ve bal', 80, NULL, false, 6),
   ('Buzlu Cay', 'Seftali veya limon aromali, ev yapimi', 55, NULL, false, 7)
 ) AS val(name, description, price, badge, is_popular, sort_order)
-CROSS JOIN categories c WHERE c.slug = 'soguk-icecekler';
+CROSS JOIN public.categories c
+WHERE c.slug = 'soguk-icecekler'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.menu_items mi
+    WHERE mi.category_id = c.id
+      AND mi.name = val.name
+  );
 
 -- Seed menu items for Kahvalti
-INSERT INTO menu_items (name, description, price, badge, is_popular, sort_order, category_id)
+INSERT INTO public.menu_items (name, description, price, badge, is_popular, sort_order, category_id)
 SELECT val.name, val.description, val.price, val.badge, val.is_popular, val.sort_order, c.id
 FROM (VALUES
   ('Serpme Kahvalti', 'Peynir cesitleri, zeytin, bal, kaymak, recel, yumurta, simit ve taze ekmek (2 kisilik)', 320, 'En Cok Satan', true, 0),
@@ -52,10 +99,17 @@ FROM (VALUES
   ('French Toast', 'Tarifimize ozel, mevsim meyveleri, akca agac surubu ve krema', 130, NULL, false, 4),
   ('Karisik Omlet', 'Mantar, peynir, biber ve domates ile dolu omlet', 110, NULL, false, 5)
 ) AS val(name, description, price, badge, is_popular, sort_order)
-CROSS JOIN categories c WHERE c.slug = 'kahvalti';
+CROSS JOIN public.categories c
+WHERE c.slug = 'kahvalti'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.menu_items mi
+    WHERE mi.category_id = c.id
+      AND mi.name = val.name
+  );
 
 -- Seed menu items for Atistirmaliklar
-INSERT INTO menu_items (name, description, price, badge, is_popular, sort_order, category_id)
+INSERT INTO public.menu_items (name, description, price, badge, is_popular, sort_order, category_id)
 SELECT val.name, val.description, val.price, val.badge, val.is_popular, val.sort_order, c.id
 FROM (VALUES
   ('Club Sandwich', 'Tavuk, pastirma, marul, domates ve mayonez, patates kizartmasi ile', 160, NULL, true, 0),
@@ -65,10 +119,17 @@ FROM (VALUES
   ('Fettuccine Alfredo', 'Kremali parmesan sosu ve mantar', 140, NULL, false, 4),
   ('Truffle Patates', 'Citir patates, truffle yagi ve parmesan', 100, 'Favorimiz', false, 5)
 ) AS val(name, description, price, badge, is_popular, sort_order)
-CROSS JOIN categories c WHERE c.slug = 'atistirmalik';
+CROSS JOIN public.categories c
+WHERE c.slug = 'atistirmaliklar'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.menu_items mi
+    WHERE mi.category_id = c.id
+      AND mi.name = val.name
+  );
 
 -- Seed menu items for Tatlilar
-INSERT INTO menu_items (name, description, price, badge, is_popular, sort_order, category_id)
+INSERT INTO public.menu_items (name, description, price, badge, is_popular, sort_order, category_id)
 SELECT val.name, val.description, val.price, val.badge, val.is_popular, val.sort_order, c.id
 FROM (VALUES
   ('Tiramisu', 'Klasik Italyan tarifi, mascarpone ve espresso ile', 120, NULL, true, 0),
@@ -79,4 +140,11 @@ FROM (VALUES
   ('Magnolia', 'Kremali puding, biskuvi tabani ve karamel sos', 90, NULL, false, 5),
   ('Kunefe', 'Hatay usulu, antep fistigi ve kaymak ile', 140, NULL, true, 6)
 ) AS val(name, description, price, badge, is_popular, sort_order)
-CROSS JOIN categories c WHERE c.slug = 'tatlilar';
+CROSS JOIN public.categories c
+WHERE c.slug = 'tatlilar'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.menu_items mi
+    WHERE mi.category_id = c.id
+      AND mi.name = val.name
+  );
