@@ -97,6 +97,13 @@ export const menuCategories: MenuCategory[] = [
         description: "Ihlamur, adacayi, papatya veya nane-limon",
         price: 50,
       },
+      {
+        id: "filtre-kahve",
+        name: "Filtre Kahve",
+        description: "Gunluk taze ogutulmus cekirdeklerle demlenir",
+        price: 70,
+        isPopular: true,
+      },
     ],
   },
   {
